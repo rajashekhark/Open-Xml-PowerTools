@@ -777,6 +777,8 @@ namespace OpenXmlPowerTools
                 CopyRelatedPartsForContentParts(newDocument, oldPart, newPart, new[] { newPart.GetXDocument().Root }, images, mediaList);
             }
 
+            // Dictionary with relationship id in the old part as the key and relationship id in the new part as the value
+            Dictionary<string, string> oleRefRelationshipMap = new Dictionary<string, string>();
             foreach (XElement oleReference in newContent.DescendantsAndSelf().Where(d => d.Name == P.oleObj || d.Name == P.externalData))
             {
                 string relId = oleReference.Attribute(R.id).Value;
@@ -785,6 +787,17 @@ namespace OpenXmlPowerTools
                 // This is necessary for those parts that get processed with both old and new ids, such as the comments
                 // part.  This is not necessary for parts such as the main document part, but this code won't malfunction
                 // in that case.
+
+                // *******************************************************************************************************
+                // Commented by: rkambhampati@xinn.com
+                // Since a relationship id is not provided when creating new embedded objects or packages, the open xml sdk
+                // assigns runtime generated ids. So its unlikely that the query below will ever return a non null value.
+                // Besides if the related parts are already created, the current element's (oleReference) relationship id
+                // should be updated with the new value, simple continuing to next enumerable element would leave the current
+                // element in an invalid state. 
+                // The key value pairs of old and new relationship ids are memoized (as Dictionary<string,string>) to handle 
+                // parts that reuse related parts. 
+                // *******************************************************************************************************
                 var tempPartIdPair5 = newContentPart.Parts.FirstOrDefault(p => p.RelationshipId == relId);
                 if (tempPartIdPair5 != null)
                     continue;
@@ -792,6 +805,12 @@ namespace OpenXmlPowerTools
                 ExternalRelationship tempEr5 = newContentPart.ExternalRelationships.FirstOrDefault(er => er.Id == relId);
                 if (tempEr5 != null)
                     continue;
+
+                if (oleRefRelationshipMap.ContainsKey(relId))
+                {
+                    oleReference.Attribute(R.id).Value = oleRefRelationshipMap[relId];
+                    continue;
+                }
 
                 var oldPartIdPair = oldContentPart.Parts.FirstOrDefault(p => p.RelationshipId == relId);
                 if (oldPartIdPair != null)
@@ -848,6 +867,8 @@ namespace OpenXmlPowerTools
                     ExternalRelationship newEr = newContentPart.AddExternalRelationship(er.RelationshipType, er.Uri);
                     oleReference.Attribute(R.id).Value = newEr.Id;
                 }
+
+                oleRefRelationshipMap.Add(relId, oleReference.Attribute(R.id).Value);
             }
 
             foreach (XElement chartReference in newContent.DescendantsAndSelf(C.chart))
